@@ -1,0 +1,201 @@
+% Created 2021-02-24 Wed 14:11
+% Intended LaTeX compiler: pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\author{190022658}
+\date{\today}
+\title{Report}
+\hypersetup{
+ pdfauthor={190022658},
+ pdftitle={Report},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 27.1 (Org mode 9.5)}, 
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+
+\section{Overview}
+\label{sec:org5eae406}
+In this practical, we were asked to analyse and document the assembly code with what the instruction do. There were three files to be analysed:
+\begin{itemize}
+\item array0-commented.s (unoptimised)
+\item array1-arm-commented.s (arm, optimisation lvl 1)
+\item array2-commented.s (optimisation lvl 2)
+\end{itemize}
+I analysed and commented all of them. Most of what they do is already commented in the assembly files. The rest are in this report.
+
+
+\section{Unoptimised Code}
+\label{sec:org4671a17}
+
+\subsection{Summary}
+\label{sec:org6aef28a}
+\begin{itemize}
+\item In the unoptimised code, there is a lot of redundant copying. For example, there is no need to copy the arguments.
+\item Along with that, there are also 'and' instructions that are redundant.
+\end{itemize}
+
+
+\subsection{Register use}
+\label{sec:org92fdac9}
+\begin{center}
+\begin{tabular}{llrl}
+\hline
+Register & register & Space (in bytes) & value\\
+\hline
+-1 (\%rbp) & \%al & 1 & return value (boolean)\\
+-8 (\%rbp) &  & 7 & unused space\\
+-16(\%rbp) & \%rdi & 8 & 1st arg (array pointer)\\
+-24(\%rbp) & \%rsi & 8 & 2nd arg (elem)\\
+-28(\%rbp) & \%edx & 4 & 3nd arg (left)\\
+-32(\%rbp) & \%ecx & 4 & 4nd arg (right)\\
+\hline
+\end{tabular}
+\end{center}
+
+Here, -8(\%rbp) to -1(rbp) remains unused throughout, while -36(\%rbp) to -48(\%rbp) gets used sometimes. 4 bytes in registers rdx and rcx are also not used (but they are not accessed either). And there are a lot of duplicates.
+
+
+\section{Optimised Code}
+\label{sec:org54bdeeb}
+
+\subsection{Summary}
+\label{sec:orgca79f29}
+\begin{itemize}
+\item In the optimised code, there is almost no redundant copying. There's no copying of the arguments
+\item Here, there are no function call. The original recursive function has been converted into an iterative form.
+\item This code has some nice parts like where in the case where elem < array[mid], instead of starting again by simply assigning the ecx register the value of mid it does mid - left (mid is the new left) and continues. This is a very small bit but goes on to show that even here a redundant copying was not done (which would have been the case if the code would have started again).
+\item The way to divide by 2 is quite interesting. The bits that had to be divided were pushed to the right by one byte. This divides the bits.
+This was done with (right - left).
+\begin{verbatim}
+  10  (2) -> 01  (1)
+  100 (4) -> 010 (2)
+  110 (6) -> 011 (3)
+\end{verbatim}
+\end{itemize}
+
+
+\subsection{Register use}
+\label{sec:orge582c46}
+\begin{center}
+\begin{tabular}{lrl}
+\hline
+Register & Space (in bytes) & Value\\
+\hline
+\%al & 1 & return value (boolean)\\
+\%rdi & 8 & 1st arg (array pointer)\\
+\%rsi & 8 & 2nd arg (elem)\\
+\%edx & 4 & 3nd arg (left)\\
+\%ecx & 4 & 4nd arg (right)\\
+\%r8d & 4 & helper\\
+\hline
+\end{tabular}
+\end{center}
+
+Here, rax (1 byte used), rdx (4 byte used), rcx (4 byte used) are not used completely, but (again) are not accessed completely either.
+
+
+\section{ARM Code}
+\label{sec:org0efff41}
+
+\subsection{Summary}
+\label{sec:org50f73df}
+Here, I learn't about addressing modes, registers, and instructions used in ARM64. There were places which did not make sense like the cinc instruction that is never true, and never increments the value of w8.
+
+\url{https://modexp.wordpress.com/2018/10/30/arm64-assembly/}
+
+This blog is where I learn't the most from.
+
+
+\subsection{Addressing modes}
+\label{sec:orgd064d3e}
+\begin{itemize}
+\item\relax [base]
+\item\relax [base, offset]
+\item\relax [base, offset]! -> this means adding the offset after the instruction
+\item\relax [base], offset  -> here the base also changes
+\item\relax [base, register, sxtw \#3] -> here the register is 32-bit thus the need to use sxtw
+\end{itemize}
+
+
+\subsection{Registers}
+\label{sec:org0becc7b}
+\begin{description}
+\item[{x29}] is frame pointer
+\item[{x30}] is link register
+\item[{x0-x7}] arguments and return value
+\item[{x8-x18}] temporary registers
+\item[{sp}] stack pointer
+\end{description}
+
+
+\subsection{Instructions}
+\label{sec:org6c3e5ed}
+\begin{itemize}
+\item Here, the instructions generally take a destination register too.
+\end{itemize}
+For example -
+\begin{verbatim}
+	sub	w8, w3, w2      ;; w8 = w3 - w2
+\end{verbatim}
+\begin{itemize}
+\item The add instruction
+\begin{verbatim}
+;; w8 = (right-left)
+;; arithmetic shift right to w8
+;; w8 = (right-left)/2
+	add	w8, w2, w8, asr #1      ;; w8 = left + (right-left)/2
+\end{verbatim}
+\end{itemize}
+
+
+\subsection{Register use}
+\label{sec:orgf81973a}
+
+\begin{center}
+\begin{tabular}{lrl}
+\hline
+Register & Space (in bytes) & Value\\
+\hline
+w0 & 4 & return value (boolean)\\
+x1 & 8 & 1st arg (array pointer)\\
+x2 & 8 & 2nd arg (elem)\\
+w3 & 4 & 3nd arg (left)\\
+w4 & 4 & 4nd arg (right)\\
+x8 & 8 & helper\\
+x9 & 8 & helper\\
+w8 & 4 & helper\\
+\hline
+\end{tabular}
+\end{center}
+
+
+\section{Conclusion}
+\label{sec:org45ed4a7}
+This practical was a good self-learning experience. This also showed that a lot of knowledge is transferable.
+
+
+\section{Bibliography}
+\label{sec:orgac21260}
+\begin{itemize}
+\item \url{https://modexp.wordpress.com/2018/10/30/arm64-assembly/}
+\item \url{https://web.stanford.edu/class/cs107/guide/x86-64.html}
+\item \url{https://stackoverflow.com/questions/17170388/trying-to-understand-the-assembly-instruction-cltd-on-x86} (cltd)
+\item \url{https://stackoverflow.com/questions/37743476/assembly-cltq-and-movslq-difference} (clqt is equivalent to movslq \%eax \%rax)
+\item \url{https://stackoverflow.com/questions/9317922/what-does-the-movzbl-instruction-do-in-ia-32-att-syntax}
+\end{itemize}
+\end{document}
